@@ -64,6 +64,16 @@ python src/build_customer_report.py
 streamlit run src/dashboard.py
 ```
 
+## Deploy to Streamlit Community Cloud
+
+This repository is ready to deploy as a Streamlit app. After pushing to GitHub, open Streamlit Community Cloud, connect this repository, and set the app entry point to `src/dashboard.py`.
+
+Deployment notes:
+
+- The repo already includes `requirements.txt` for dependency installation.
+- The dashboard reads from files in `data/` and `outputs/`, so the committed artifacts are included in the GitHub repo.
+- If you later want a slimmer production repo, the pipeline can be changed to regenerate outputs during deployment instead of committing them.
+
 ## Notes
 
 - The Kaggle download step requires a valid `kaggle.json` file or `KAGGLE_USERNAME` and `KAGGLE_KEY` environment variables.
