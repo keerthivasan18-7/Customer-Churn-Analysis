@@ -18,6 +18,7 @@ MODEL_METRICS_PATH = os.path.join(OUTPUT_DIR, "model_metrics_tuned.csv")
 RISK_SUMMARY_PATH = os.path.join(OUTPUT_DIR, "churn_risk_segment_summary.csv")
 RISK_SEGMENTS_PATH = os.path.join(OUTPUT_DIR, "churn_risk_segments.csv")
 EXPLANATIONS_PATH = os.path.join(OUTPUT_DIR, "test_shap_explanations.csv")
+TEST_DATA_PATH = os.path.join(DATA_DIR, "processed_test.csv")
 
 
 @st.cache_data
@@ -25,6 +26,92 @@ def load_csv(path: str) -> pd.DataFrame:
     if not os.path.exists(path):
         return pd.DataFrame()
     return pd.read_csv(path)
+
+
+def calculate_churn_by_contract(test_data: pd.DataFrame) -> pd.DataFrame:
+    contracts = []
+    if "Contract_One year" in test_data.columns:
+        for col in ["Contract_One year", "Contract_Two year"]:
+            if col in test_data.columns:
+                label = col.replace("Contract_", "")
+                if col == "Contract_One year":
+                    subset = test_data[test_data["Contract_One year"] == 1]
+                    if len(subset) > 0:
+                        churn_rate = subset["Churn"].mean() if "Churn" in subset.columns else 0
+                        contracts.append({"Contract Type": label, "Churn Rate": churn_rate, "Count": len(subset)})
+                elif col == "Contract_Two year":
+                    subset = test_data[test_data["Contract_Two year"] == 1]
+                    if len(subset) > 0:
+                        churn_rate = subset["Churn"].mean() if "Churn" in subset.columns else 0
+                        contracts.append({"Contract Type": label, "Churn Rate": churn_rate, "Count": len(subset)})
+        # Month-to-month: neither one year nor two year
+        month_to_month = test_data[(test_data["Contract_One year"] == 0) & (test_data["Contract_Two year"] == 0)]
+        if len(month_to_month) > 0:
+            churn_rate = month_to_month["Churn"].mean() if "Churn" in month_to_month.columns else 0
+            contracts.append({"Contract Type": "Month-to-month", "Churn Rate": churn_rate, "Count": len(month_to_month)})
+    return pd.DataFrame(contracts)
+
+
+def calculate_churn_by_tenure_group(test_data: pd.DataFrame) -> pd.DataFrame:
+    tenure_groups = []
+    tenure_cols = ["tenure_group_12-24", "tenure_group_24-48", "tenure_group_48+"]
+    for col in tenure_cols:
+        if col in test_data.columns:
+            label = col.replace("tenure_group_", "")
+            subset = test_data[test_data[col] == 1]
+            if len(subset) > 0:
+                churn_rate = subset["Churn"].mean() if "Churn" in subset.columns else 0
+                tenure_groups.append({"Tenure Group": label, "Churn Rate": churn_rate, "Count": len(subset)})
+    # 0-12 months: none of the above
+    zero_to_twelve = test_data[(test_data.get("tenure_group_12-24", 0) == 0) & (test_data.get("tenure_group_24-48", 0) == 0) & (test_data.get("tenure_group_48+", 0) == 0)]
+    if len(zero_to_twelve) > 0:
+        churn_rate = zero_to_twelve["Churn"].mean() if "Churn" in zero_to_twelve.columns else 0
+        tenure_groups.insert(0, {"Tenure Group": "0-12 months", "Churn Rate": churn_rate, "Count": len(zero_to_twelve)})
+    return pd.DataFrame(tenure_groups)
+
+
+def calculate_churn_by_internet_service(test_data: pd.DataFrame) -> pd.DataFrame:
+    services = []
+    internet_cols = {"InternetService_Fiber optic": "Fiber optic", "InternetService_No": "No internet"}
+    for col, label in internet_cols.items():
+        if col in test_data.columns:
+            subset = test_data[test_data[col] == 1]
+            if len(subset) > 0:
+                churn_rate = subset["Churn"].mean() if "Churn" in subset.columns else 0
+                services.append({"Internet Service": label, "Churn Rate": churn_rate, "Count": len(subset)})
+    # DSL: not Fiber optic and not No
+    if "InternetService_Fiber optic" in test_data.columns and "InternetService_No" in test_data.columns:
+        dsl = test_data[(test_data["InternetService_Fiber optic"] == 0) & (test_data["InternetService_No"] == 0)]
+        if len(dsl) > 0:
+            churn_rate = dsl["Churn"].mean() if "Churn" in dsl.columns else 0
+            services.insert(0, {"Internet Service": "DSL", "Churn Rate": churn_rate, "Count": len(dsl)})
+    return pd.DataFrame(services)
+
+
+def calculate_churn_by_payment_method(test_data: pd.DataFrame) -> pd.DataFrame:
+    methods = []
+    payment_cols = {
+        "PaymentMethod_Credit card (automatic)": "Credit card (auto)",
+        "PaymentMethod_Electronic check": "Electronic check",
+        "PaymentMethod_Mailed check": "Mailed check"
+    }
+    for col, label in payment_cols.items():
+        if col in test_data.columns:
+            subset = test_data[test_data[col] == 1]
+            if len(subset) > 0:
+                churn_rate = subset["Churn"].mean() if "Churn" in subset.columns else 0
+                methods.append({"Payment Method": label, "Churn Rate": churn_rate, "Count": len(subset)})
+    # Bank transfer: not any of the above
+    if all(col in test_data.columns for col in payment_cols.keys()):
+        bank_transfer = test_data[
+            (test_data["PaymentMethod_Credit card (automatic)"] == 0) & 
+            (test_data["PaymentMethod_Electronic check"] == 0) & 
+            (test_data["PaymentMethod_Mailed check"] == 0)
+        ]
+        if len(bank_transfer) > 0:
+            churn_rate = bank_transfer["Churn"].mean() if "Churn" in bank_transfer.columns else 0
+            methods.append({"Payment Method": "Bank transfer", "Churn Rate": churn_rate, "Count": len(bank_transfer)})
+    return pd.DataFrame(methods)
 
 
 def format_pct(value: float) -> str:
@@ -265,16 +352,16 @@ def main():
     risk_summary = load_csv(RISK_SUMMARY_PATH)
     risk_segments = load_csv(RISK_SEGMENTS_PATH)
     explanations = load_csv(EXPLANATIONS_PATH)
+    test_data = load_csv(TEST_DATA_PATH)
 
     if metrics.empty or risk_summary.empty or risk_segments.empty:
         st.error("Required output files are missing. Run the pipeline first: preprocess, train, tune, segment, and explain.")
         st.stop()
 
     # Top-level KPIs
-    best_model_row = metrics.sort_values("roc_auc", ascending=False).iloc[0]
-    high_risk_share = float(risk_summary.loc[risk_summary["risk_band"] == "High", "customer_share"].iloc[0])
+    total_customers = len(test_data) if not test_data.empty else 0
+    actual_churn_rate = test_data["Churn"].mean() if (not test_data.empty and "Churn" in test_data.columns) else 0.0
     high_risk_count = int(risk_summary.loc[risk_summary["risk_band"] == "High", "customers"].iloc[0])
-    avg_high_risk = float(risk_summary.loc[risk_summary["risk_band"] == "High", "avg_predicted_churn_probability"].iloc[0])
     total_revenue_at_risk_annual = float(risk_summary["revenue_at_risk_annual"].sum()) if "revenue_at_risk_annual" in risk_summary.columns else 0.0
 
     nav = st.sidebar.radio(
@@ -285,9 +372,9 @@ def main():
     st.sidebar.divider()
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(stat_card("Best ROC AUC", f"{best_model_row['roc_auc']:.3f}", f"Top model: {best_model_row.name}"), unsafe_allow_html=True)
-    c2.markdown(stat_card("High-risk customers", f"{high_risk_count:,}", "Immediate outreach candidates"), unsafe_allow_html=True)
-    c3.markdown(stat_card("High-risk share", format_pct(high_risk_share), "Share of scored customers"), unsafe_allow_html=True)
+    c1.markdown(stat_card("Total Customers", f"{total_customers:,}", "Scored in test set"), unsafe_allow_html=True)
+    c2.markdown(stat_card("Actual Churn Rate", format_pct(actual_churn_rate), "Historical churn observed"), unsafe_allow_html=True)
+    c3.markdown(stat_card("High-risk customers", f"{high_risk_count:,}", "Immediate outreach candidates"), unsafe_allow_html=True)
     c4.markdown(stat_card("Revenue at risk", f"${total_revenue_at_risk_annual:,.0f}", "Annualized expected revenue loss"), unsafe_allow_html=True)
 
     if nav == "Overview":
@@ -318,6 +405,53 @@ def main():
                         summary_view[money_col] = summary_view[money_col].map(lambda x: f"${x:,.0f}")
                 st.dataframe(summary_view, use_container_width=True, hide_index=True)
                 st.bar_chart(risk_summary.set_index("risk_band")["customers"])
+
+        st.divider()
+        section_header("Actual Churn Analysis", "Historical churn patterns by key customer attributes.")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            with st.container(border=True):
+                st.markdown("### Churn Rate by Contract Type")
+                churn_by_contract = calculate_churn_by_contract(test_data)
+                if not churn_by_contract.empty:
+                    st.bar_chart(churn_by_contract.set_index("Contract Type")["Churn Rate"])
+                    st.dataframe(churn_by_contract, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No contract data available.")
+        
+        with col2:
+            with st.container(border=True):
+                st.markdown("### Churn Rate by Tenure Group")
+                churn_by_tenure = calculate_churn_by_tenure_group(test_data)
+                if not churn_by_tenure.empty:
+                    st.bar_chart(churn_by_tenure.set_index("Tenure Group")["Churn Rate"])
+                    st.dataframe(churn_by_tenure, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No tenure data available.")
+        
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            with st.container(border=True):
+                st.markdown("### Churn Rate by Internet Service")
+                churn_by_internet = calculate_churn_by_internet_service(test_data)
+                if not churn_by_internet.empty:
+                    st.bar_chart(churn_by_internet.set_index("Internet Service")["Churn Rate"])
+                    st.dataframe(churn_by_internet, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No internet service data available.")
+        
+        with col4:
+            with st.container(border=True):
+                st.markdown("### Churn Rate by Payment Method")
+                churn_by_payment = calculate_churn_by_payment_method(test_data)
+                if not churn_by_payment.empty:
+                    st.bar_chart(churn_by_payment.set_index("Payment Method")["Churn Rate"])
+                    st.dataframe(churn_by_payment, use_container_width=True, hide_index=True)
+                else:
+                    st.info("No payment method data available.")
 
     elif nav == "Risk Segments":
         with st.container(border=True):
