@@ -399,7 +399,7 @@ def main():
     st.sidebar.divider()
 
     c1, c2, c3, c4 = st.columns(4)
-    c1.markdown(stat_card("Total Customers", f"{total_customers:,}", "Scored in test set"), unsafe_allow_html=True)
+    c1.markdown(stat_card("Total Customers", f"{total_customers:,}", "Customers analyzed"), unsafe_allow_html=True)
     c2.markdown(stat_card("Actual Churn Rate", format_pct(actual_churn_rate), "Historical churn observed"), unsafe_allow_html=True)
     c3.markdown(stat_card("High-risk customers", f"{high_risk_count:,}", "Immediate outreach candidates"), unsafe_allow_html=True)
     c4.markdown(stat_card("Revenue at risk", f"${total_revenue_at_risk_annual:,.0f}", "Annualized expected revenue loss"), unsafe_allow_html=True)
