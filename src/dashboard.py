@@ -208,6 +208,47 @@ def get_customer_value_by_risk_band(risk_segments: pd.DataFrame, test_data: pd.D
     return value_by_band
 
 
+def generate_churn_insights(test_data: pd.DataFrame) -> list:
+    """Generate key churn insights from historical data."""
+    insights = []
+    
+    # Contract type insights
+    churn_by_contract = calculate_churn_by_contract(test_data)
+    if not churn_by_contract.empty:
+        max_contract = churn_by_contract.loc[churn_by_contract["Churn Rate"].idxmax()]
+        min_contract = churn_by_contract.loc[churn_by_contract["Churn Rate"].idxmin()]
+        insights.append(
+            f"**{max_contract['Contract Type']}** customers have a **{max_contract['Churn Rate']:.1%}** churn rate, "
+            f"compared with only **{min_contract['Churn Rate']:.1%}** for **{min_contract['Contract Type']}**."
+        )
+    
+    # Tenure insights
+    churn_by_tenure = calculate_churn_by_tenure_group(test_data)
+    if not churn_by_tenure.empty:
+        max_tenure = churn_by_tenure.loc[churn_by_tenure["Churn Rate"].idxmax()]
+        insights.append(
+            f"Customers with **{max_tenure['Tenure Group']}** have the highest churn rate at **{max_tenure['Churn Rate']:.1%}**."
+        )
+    
+    # Internet service insights
+    churn_by_internet = calculate_churn_by_internet_service(test_data)
+    if not churn_by_internet.empty:
+        max_internet = churn_by_internet.loc[churn_by_internet["Churn Rate"].idxmax()]
+        insights.append(
+            f"**{max_internet['Internet Service']}** customers show a **{max_internet['Churn Rate']:.1%}** churn rate."
+        )
+    
+    # Payment method insights
+    churn_by_payment = calculate_churn_by_payment_method(test_data)
+    if not churn_by_payment.empty:
+        max_payment = churn_by_payment.loc[churn_by_payment["Churn Rate"].idxmax()]
+        insights.append(
+            f"**{max_payment['Payment Method']}** customers show a **{max_payment['Churn Rate']:.1%}** churn rate."
+        )
+    
+    return insights
+
+
 def main():
     st.markdown(
         """
@@ -653,10 +694,10 @@ def main():
 
     st.divider()
     with st.container(border=True):
-        section_header("Operational note", "A lightweight internal dashboard that can be extended later.")
-        st.write(
-            "This dashboard is ready to run locally and can be extended with authentication, CRM integration, or deployment."
-        )
+        section_header("🔎 Key Churn Insights", "Critical patterns from historical customer data.")
+        insights = generate_churn_insights(test_data)
+        for insight in insights:
+            st.markdown(f"• {insight}")
 
 
 if __name__ == "__main__":
